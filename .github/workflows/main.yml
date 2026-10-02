@@ -1,9 +1,7 @@
 name: iios checkin
 
 on:
-  workflow_dispatch:        # 先只手动触发，跑通再加 schedule
-  # schedule:
-  #   - cron: '0 1 * * *'
+  workflow_dispatch:
 
 jobs:
   checkin:
@@ -18,7 +16,7 @@ jobs:
       - name: Install Playwright
         run: |
           pip install playwright
-          playwright install --with-deps chromium
+          playwright install --with-deps webkit
 
       - name: Run checkin
         env:
