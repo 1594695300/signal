@@ -1,5 +1,10 @@
 import os
+import sys
+import io
 from playwright.sync_api import sync_playwright
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 USERNAME = os.environ["IIOS_USERNAME"]
 PASSWORD = os.environ["IIOS_PASSWORD"]
@@ -28,7 +33,7 @@ def run():
             timezone_id="Asia/Shanghai",
         )
 
-        # 反检测：抹掉 Playwright / 自动化痕迹
+        # Anti-detection: hide Playwright / automation traces
         ctx.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 
@@ -57,21 +62,21 @@ def run():
 
         page = ctx.new_page()
 
-        # 记录 API 请求
+        # Log API requests
         api_logs = []
 
         def on_request(req):
             if "/api/" in req.url:
-                api_logs.append(f"→ {req.method} {req.url}")
+                api_logs.append(f"-> {req.method} {req.url}")
 
         def on_response(resp):
             if "/api/" in resp.url:
-                api_logs.append(f"← {resp.status} {resp.url}")
+                api_logs.append(f"<- {resp.status} {resp.url}")
 
         page.on("request", on_request)
         page.on("response", on_response)
 
-        print("→ 打开登录页")
+        print("Open login page")
         page.goto(
             "https://www.iios.me/#/login",
             wait_until="domcontentloaded",
@@ -80,30 +85,30 @@ def run():
         page.wait_for_timeout(3000)
         page.screenshot(path="02_login.png")
 
-        print("→ 填写账号密码")
+        print("Fill email / password")
         page.fill("input[type=email]", USERNAME)
         page.fill("input[type=password]", PASSWORD)
         page.wait_for_timeout(500)
         page.screenshot(path="03_filled.png")
 
-        print("→ 点击登录按钮")
+        print("Click login button")
         try:
-            page.get_by_role("button", name="提交登录").click(timeout=5000)
-            print("   已点击「提交登录」")
+            page.get_by_role("button", name="\u63d0\u4ea4\u767b\u5f55").click(timeout=5000)
+            print("   clicked submit button")
         except Exception as e:
-            print("   按文字没点到，改用选择器:", e)
+            print("   text locator failed, fallback to selector:", e)
             page.click("button[type=submit]")
 
         page.wait_for_timeout(5000)
         page.screenshot(path="04_after_login.png")
-        print("   登录后 URL:", page.url)
+        print("   URL after login:", page.url)
 
-        print("\n=== API 请求日志 ===")
+        print("\n=== API log ===")
         for line in api_logs:
             print(line)
 
         ctx.storage_state(path="state.json")
-        print("\n已保存 state.json")
+        print("\nstate.json saved")
 
         browser.close()
 
