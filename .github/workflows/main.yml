@@ -1,9 +1,9 @@
 name: iios checkin
 
 on:
-  schedule:
-    - cron: '0 1 * * *'   # 每天 UTC 1:00 = 北京时间 9:00
-  workflow_dispatch:
+  workflow_dispatch:        # 先只手动触发，跑通再加 schedule
+  # schedule:
+  #   - cron: '0 1 * * *'
 
 jobs:
   checkin:
@@ -15,12 +15,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install deps
+      - name: Install Playwright
         run: |
           pip install playwright
           playwright install --with-deps chromium
 
       - name: Run checkin
         env:
-          STORAGE_STATE: ${{ secrets.IIOS_STORAGE_STATE }}
+          IIOS_USERNAME: ${{ secrets.IIOS_USERNAME }}
+          IIOS_PASSWORD: ${{ secrets.IIOS_PASSWORD }}
         run: python checkin.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: "*.png"
