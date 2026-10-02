@@ -4,40 +4,55 @@ from playwright.sync_api import sync_playwright
 USERNAME = os.environ["IIOS_USERNAME"]
 PASSWORD = os.environ["IIOS_PASSWORD"]
 
-IPHONE_UA = (
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-    "Version/17.0 Mobile/15E148 Safari/604.1"
+UA_WIN_CHROME = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
 )
 
 
 def run():
     with sync_playwright() as p:
-        browser = p.webkit.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ],
+        )
 
         ctx = browser.new_context(
-            user_agent=IPHONE_UA,
-            viewport={"width": 390, "height": 844},
-            device_scale_factor=3,
-            is_mobile=True,
-            has_touch=True,
+            user_agent=UA_WIN_CHROME,
+            viewport={"width": 1440, "height": 900},
             locale="zh-CN",
             timezone_id="Asia/Shanghai",
         )
 
-        # 补 iOS Safari 专有特征，防止被环境检测拦
+        # 反检测：抹掉 Playwright / 自动化痕迹
         ctx.add_init_script("""
-            Object.defineProperty(navigator, 'platform', {
-                get: () => 'iPhone'
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5].map(i => ({ name: 'Plugin ' + i }))
             });
-            Object.defineProperty(navigator, 'vendor', {
-                get: () => 'Apple Computer, Inc.'
+
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['zh-CN', 'zh', 'en']
             });
-            Object.defineProperty(navigator, 'maxTouchPoints', {
-                get: () => 5
-            });
-            window.webkit = window.webkit || {};
-            window.webkit.messageHandlers = window.webkit.messageHandlers || {};
+
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : originalQuery(parameters)
+            );
         """)
 
         page = ctx.new_page()
