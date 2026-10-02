@@ -1,5 +1,5 @@
 import os, time
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+from playwright.sync_api import sync_playwright
 
 USERNAME = os.environ["IIOS_USERNAME"]
 PASSWORD = os.environ["IIOS_PASSWORD"]
@@ -26,35 +26,66 @@ def run():
         )
         page = ctx.new_page()
 
-        print("→ 打开首页")
-        page.goto("https://www.iios.me/", wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(3000)
-        page.screenshot(path="01_home.png")
-        print("标题:", page.title())
-        print("URL:", page.url)
-
-        # 检测是否被 Cloudflare 拦
-        html = page.content()
-        if "cf-challenge" in html or "Just a moment" in html or "Checking your browser" in html:
-            print("❌ 被 Cloudflare 拦截")
-            page.screenshot(path="cf_block.png")
-            browser.close()
-            return
+        # 记录所有 API 请求，方便看登录发了什么
+        api_logs = []
+        def on_request(req):
+            if "/api/" in req.url:
+                api_logs.append(f"→ {req.method} {req.url}")
+        def on_response(resp):
+            if "/api/" in resp.url:
+                api_logs.append(f"← {resp.status} {resp.url}")
+        page.on("request", on_request)
+        page.on("response", on_response)
 
         print("→ 打开登录页")
         page.goto("https://www.iios.me/#/login", wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(3000)
         page.screenshot(path="02_login.png")
 
-        # 打印页面里所有输入框，方便定位
-        inputs = page.query_selector_all("input")
-        print(f"找到 {len(inputs)} 个输入框:")
-        for i, el in enumerate(inputs):
-            print(f"  [{i}] type={el.get_attribute('type')!r} "
-                  f"name={el.get_attribute('name')!r} "
-                  f"placeholder={el.get_attribute('placeholder')!r}")
+        print("→ 填写账号密码")
+        page.fill("input[type=email]", USERNAME)
+        page.fill("input[type=password]", PASSWORD)
+        page.wait_for_timeout(500)
+        page.screenshot(path="03_filled.png")
 
-        print("✅ 到这里说明能打开登录页，下一步根据输入框信息填账号密码")
+        print("→ 点击登录按钮")
+        # 先尝试常见选择器，找不到就打印所有 button 文字
+        btn = None
+        for sel in [
+            "button[type=submit]",
+            "button:has-text('登录')",
+            "button:has-text('登 录')",
+            ".login-btn",
+        ]:
+            try:
+                el = page.query_selector(sel)
+                if el:
+                    btn = el
+                    print(f"   命中按钮选择器: {sel}")
+                    break
+            except Exception:
+                pass
+
+        if not btn:
+            print("   ⚠️ 没找到登录按钮，页面上的 button 有：")
+            for b in page.query_selector_all("button"):
+                print("   -", repr(b.inner_text()))
+            browser.close()
+            return
+
+        btn.click()
+        page.wait_for_timeout(5000)
+        page.screenshot(path="04_after_login.png")
+        print("   登录后 URL:", page.url)
+
+        print("\n=== API 请求日志 ===")
+        for line in api_logs:
+            print(line)
+
+        # 保存登录态
+        ctx.storage_state(path="state.json")
+        print("\n已保存 state.json")
+
         browser.close()
 
 if __name__ == "__main__":
