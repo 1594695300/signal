@@ -1,0 +1,26 @@
+name: iios checkin
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 每天 UTC 1:00 = 北京时间 9:00
+  workflow_dispatch:
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Run checkin
+        env:
+          STORAGE_STATE: ${{ secrets.IIOS_STORAGE_STATE }}
+        run: python checkin.py
